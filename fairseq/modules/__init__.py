@@ -74,12 +74,4 @@ __all__ = [
     "TransposeLast",
     "VGGBlock",
     "unfold1d",
-    "ContextDecoderLayer",
-    "ContextEncoderLayer",
-    "AutoformerEncoderLayer",
-    "AutoformerDecoderLayer",
-    "SAutoformerEncoderLayer",
-    "AutoformerSingleEncoderLayer",
-    "BigAutoformerEncoderLayer",
-    "ContextCLSREncoderLayer"
 ]
