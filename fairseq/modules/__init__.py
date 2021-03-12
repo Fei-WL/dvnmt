@@ -35,12 +35,6 @@ from .transpose_last import TransposeLast
 from .unfold import unfold1d
 from .transformer_layer import TransformerDecoderLayer, TransformerEncoderLayer
 from .vggblock import VGGBlock
-from .s_autoformer_layer import SAutoformerEncoderLayer
-from .autoformer_layer import AutoformerEncoderLayer, AutoformerDecoderLayer
-from .autoformersingle_layer import AutoformerSingleEncoderLayer
-from .bigautoformer_layer import BigAutoformerEncoderLayer
-from .context_layer import ContextDecoderLayer, ContextEncoderLayer
-from .contextclsr_layer import ContextCLSREncoderLayer
 
 
 __all__ = [
