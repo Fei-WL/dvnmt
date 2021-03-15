@@ -55,6 +55,16 @@ def main(args):
     def dict_path(lang):
         return dest_path("dict", lang) + ".txt"
 
+    def build_dictionary(filenames, src=False, tgt=False):
+        assert src ^ tgt
+        return task.build_dictionary(
+            filenames,
+            workers=args.workers,
+            threshold=args.thresholdsrc if src else args.thresholdtgt,
+            nwords=args.nwordssrc if src else args.nwordstgt,
+            padding_factor=args.padding_factor,
+        )
+
     target = not args.only_source
 
     if not args.srcdict and os.path.exists(dict_path(args.source_lang)):
@@ -203,24 +213,8 @@ def binarize(args, filename, vocab, output_prefix, lang, offset, end, append_eos
     return res
 
 
-def binarize_alignments(args, filename, parse_alignment, output_prefix, offset, end):
-    ds = indexed_dataset.make_builder(
-        dataset_dest_file(args, output_prefix, None, "bin"),
-        impl=args.dataset_impl,
-        vocab_size=None,
-    )
-
-    def consumer(tensor):
-        ds.add_item(tensor)
-
-    res = Binarizer.binarize_alignments(
-        filename, parse_alignment, consumer, offset=offset, end=end
-    )
-    ds.finalize(dataset_dest_file(args, output_prefix, None, "idx"))
-    return res
-
-
 def dataset_dest_prefix(args, output_prefix, lang):
+    # 构造前缀用的
     base = "{}/{}".format(args.destdir, output_prefix)
     if lang is not None:
         lang_part = ".{}-{}.{}".format(args.source_lang, args.target_lang, lang)
