@@ -55,14 +55,10 @@ def main(args):
     def dict_path(lang):
         return dest_path("dict", lang) + ".txt"
 
-    def build_dictionary(filenames, src=False, tgt=False):
-        assert src ^ tgt
+    def build_dictionary(filenames):
         return task.build_dictionary(
             filenames,
             workers=args.workers,
-            threshold=args.thresholdsrc if src else args.thresholdtgt,
-            nwords=args.nwordssrc if src else args.nwordstgt,
-            padding_factor=args.padding_factor,
         )
 
     target = not args.only_source
@@ -71,6 +67,9 @@ def main(args):
         raise FileExistsError(dict_path(args.source_lang))
     if target and not args.tgtdict and os.path.exists(dict_path(args.target_lang)):
         raise FileExistsError(dict_path(args.target_lang))
+
+    labeldict = build_dictionary([args.trainlabel])
+    logger.info("{}{}".format("Info of labeldict:", labeldict))
 
     assert (
         args.srcdict
@@ -82,9 +81,10 @@ def main(args):
     ), "In classify task, --tgtdict must be set"
     tgt_dict = task.load_dictionary(args.tgtdict)
 
+
     src_dict.save(dict_path(args.source_lang))
     tgt_dict.save(dict_path(args.target_lang))
-    logger.info(dict_path(args.target_lang))
+    labeldict.save(dict_path("label"))
 
     def make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers):
         logger.info("[{}] Dictionary: {} types".format(lang, len(vocab)))
@@ -164,35 +164,44 @@ def main(args):
             make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers)
 
     def make_all(lang, vocab):
-        if args.trainpref:
-            make_dataset(vocab, args.trainpref, "train", lang, num_workers=args.workers)
-        if args.context and lang != args.target_lang:
-            if args.trainprevpref:
-                make_dataset(vocab, args.trainprevpref, "train_prev", lang, num_workers=args.workers)
-            if args.trainpostpref:
-                make_dataset(vocab, args.trainpostpref, "train_post", lang, num_workers=args.workers)
-        if args.validpref:
-            for k, validpref in enumerate(args.validpref.split(",")):
-                outprefix = "valid{}".format(k) if k > 0 else "valid"
-                make_dataset(
-                    vocab, validpref, outprefix, lang, num_workers=args.workers
-                )
+        if lang == "label":
+            if args.trainlabel:
+                make_dataset(vocab, args.trainlabel, "train", lang, num_workers=args.workers)
+            if args.validlabel:
+                make_dataset(vocab, args.validlabel, "valid", lang, num_workers=args.workers)
+            if args.testlabel:
+                make_dataset(vocab, args.testlabel, "test", lang, num_workers=args.workers)
+        else:
+            if args.trainpref:
+                make_dataset(vocab, args.trainpref, "train", lang, num_workers=args.workers)
             if args.context and lang != args.target_lang:
-                if args.validprevpref:
-                    make_dataset(vocab, args.validprevpref, "valid_prev", lang, num_workers=args.workers)
-                if args.validpostpref:
-                    make_dataset(vocab, args.validpostpref, "valid_post", lang, num_workers=args.workers)
-        if args.testpref:
-            for k, testpref in enumerate(args.testpref.split(",")):
-                outprefix = "test{}".format(k) if k > 0 else "test"
-                make_dataset(vocab, testpref, outprefix, lang, num_workers=args.workers)
-            if args.context and lang != args.target_lang:
-                if args.testprevpref:
-                    make_dataset(vocab, args.testprevpref, "test_prev", lang, num_workers=args.workers)
-                if args.testpostpref:
-                    make_dataset(vocab, args.testpostpref, "test_post", lang, num_workers=args.workers)
+                if args.trainprevpref:
+                    make_dataset(vocab, args.trainprevpref, "train_prev", lang, num_workers=args.workers)
+                if args.trainpostpref:
+                    make_dataset(vocab, args.trainpostpref, "train_post", lang, num_workers=args.workers)
+            if args.validpref:
+                for k, validpref in enumerate(args.validpref.split(",")):
+                    outprefix = "valid{}".format(k) if k > 0 else "valid"
+                    make_dataset(
+                        vocab, validpref, outprefix, lang, num_workers=args.workers
+                    )
+                if args.context and lang != args.target_lang:
+                    if args.validprevpref:
+                        make_dataset(vocab, args.validprevpref, "valid_prev", lang, num_workers=args.workers)
+                    if args.validpostpref:
+                        make_dataset(vocab, args.validpostpref, "valid_post", lang, num_workers=args.workers)
+            if args.testpref:
+                for k, testpref in enumerate(args.testpref.split(",")):
+                    outprefix = "test{}".format(k) if k > 0 else "test"
+                    make_dataset(vocab, testpref, outprefix, lang, num_workers=args.workers)
+                if args.context and lang != args.target_lang:
+                    if args.testprevpref:
+                        make_dataset(vocab, args.testprevpref, "test_prev", lang, num_workers=args.workers)
+                    if args.testpostpref:
+                        make_dataset(vocab, args.testpostpref, "test_post", lang, num_workers=args.workers)
 
     make_all(args.source_lang, src_dict)
+    make_all("label", labeldict)
 
     logger.info("Wrote preprocessed data to {}".format(args.destdir))
 
