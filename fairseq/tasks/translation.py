@@ -87,6 +87,8 @@ def load_langpair_dataset(
                 ),
                 src_dict.eos(),
             )
+        print("src_dataset length:", len(src_dataset))
+        print("src_dataset type:", type(src_dataset))
         src_datasets.append(src_dataset)
 
         tgt_dataset = data_utils.load_indexed_dataset(
