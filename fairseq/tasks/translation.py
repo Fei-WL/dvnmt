@@ -145,6 +145,8 @@ def load_langpair_dataset(
             )
 
     tgt_dataset_sizes = tgt_dataset.sizes if tgt_dataset is not None else None
+
+    logger.info("{}{}".format("Info of tgt dataset:", type(tgt_dataset)))
     return LanguagePairDataset(
         src_dataset,
         src_dataset.sizes,

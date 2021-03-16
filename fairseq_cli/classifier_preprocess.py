@@ -61,6 +61,9 @@ def main(args):
             workers=args.workers,
         )
 
+    def label_path():
+        return "{}{}".format(args.trainlabel, ".label")
+
     target = not args.only_source
 
     if not args.srcdict and os.path.exists(dict_path(args.source_lang)):
@@ -68,7 +71,7 @@ def main(args):
     if target and not args.tgtdict and os.path.exists(dict_path(args.target_lang)):
         raise FileExistsError(dict_path(args.target_lang))
 
-    labeldict = build_dictionary([args.trainlabel])
+    labeldict = build_dictionary([label_path()])
     logger.info("{}{}".format("Info of labeldict:", labeldict))
     for idx in range(len(labeldict)):
         print(labeldict[idx])
