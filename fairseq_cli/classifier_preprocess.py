@@ -70,6 +70,8 @@ def main(args):
 
     labeldict = build_dictionary([args.trainlabel])
     logger.info("{}{}".format("Info of labeldict:", labeldict))
+    for idx in range(len(labeldict)):
+        print(labeldict[idx])
 
     assert (
         args.srcdict
