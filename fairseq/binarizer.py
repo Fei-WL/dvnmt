@@ -103,3 +103,64 @@ class Binarizer:
                 safe_readline(f)
                 offsets[i] = f.tell()
             return offsets
+
+
+class LabelBinarizer:
+    @staticmethod
+    def binarize(
+        filename,
+        consumer,
+        offset=0,
+        end=-1
+    ):
+        nseq, ntok = 0, 0
+        replaced = Counter()
+        with open(PathManager.get_local_path(filename), "r", encoding="utf-8") as f:
+            f.seek(offset)
+            # next(f) breaks f.tell(), hence readline() must be used
+            line = safe_readline(f)
+            while line:
+                if end > 0 and f.tell() > end:
+                    break
+
+                class_id = line.strip()
+                class_id = [int(class_id)]
+                ids = torch.IntTensor(class_id)
+
+                consumer(ids)
+                line = f.readline()
+        return {
+            "nseq": nseq,
+            "nunk": sum(replaced.values()),
+            "ntok": ntok,
+            "replaced": replaced,
+        }
+        
+
+    @staticmethod
+    def binarize_alignments(filename, alignment_parser, consumer, offset=0, end=-1):
+        nseq = 0
+
+        with open(PathManager.get_local_path(filename), "r") as f:
+            f.seek(offset)
+            line = safe_readline(f)
+            while line:
+                if end > 0 and f.tell() > end:
+                    break
+                ids = alignment_parser(line)
+                nseq += 1
+                consumer(ids)
+                line = f.readline()
+        return {"nseq": nseq}
+
+    @staticmethod
+    def find_offsets(filename, num_chunks):
+        with open(PathManager.get_local_path(filename), "r", encoding="utf-8") as f:
+            size = os.fstat(f.fileno()).st_size
+            chunk_size = size // num_chunks
+            offsets = [0 for _ in range(num_chunks + 1)]
+            for i in range(1, num_chunks):
+                f.seek(chunk_size * i)
+                safe_readline(f)
+                offsets[i] = f.tell()
+            return offsets

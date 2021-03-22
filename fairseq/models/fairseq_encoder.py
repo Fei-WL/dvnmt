@@ -34,6 +34,19 @@ CtxEncoderOut = NamedTuple(
         ("src_lengths", Optional[Tensor]),  # B x 1
     ]
 )
+VAEEncoderOut = NamedTuple(
+    "VAEEncoderOut",
+    [
+        ("encoder_out", Tensor),  # T x B x C
+        ("encoder_padding_mask", Optional[Tensor]),  # B x T
+        ("context_out", Tensor),  # T x B x C
+        ("context_padding_mask", Optional[Tensor]),  # B x T
+        ("encoder_embedding", Optional[Tensor]),  # B x T x C
+        ("encoder_states", Optional[List[Tensor]]),  # List[T x B x C]
+        ("src_tokens", Optional[Tensor]),  # B x T
+        ("src_lengths", Optional[Tensor]),  # B x 1
+    ]
+)
 AutoEncoderOut = NamedTuple(
     "AutoEncoderOut",
     [

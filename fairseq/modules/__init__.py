@@ -34,6 +34,7 @@ from .transformer_sentence_encoder import TransformerSentenceEncoder
 from .transpose_last import TransposeLast
 from .unfold import unfold1d
 from .transformer_layer import TransformerDecoderLayer, TransformerEncoderLayer
+from .dvnmt_layer import ContextEncoderLayer, LatentNet
 from .vggblock import VGGBlock
 
 
@@ -71,6 +72,8 @@ __all__ = [
     "TransformerSentenceEncoder",
     "TransformerDecoderLayer",
     "TransformerEncoderLayer",
+    "ContextEncoderLayer",
+    "LatentNet",
     "TransposeLast",
     "VGGBlock",
     "unfold1d",

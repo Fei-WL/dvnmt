@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import argparse
 from argparse import Namespace
 from typing import Union
@@ -11,12 +12,15 @@ from fairseq.dataclass import FairseqDataclass
 from omegaconf import DictConfig
 
 
+logger = logging.getLogger(__name__)
 REGISTRIES = {}
 
 
 def setup_registry(registry_name: str, base_class=None, default=None, required=False):
     assert registry_name.startswith("--")
     registry_name = registry_name[2:].replace("-", "_")
+
+    # logger.info("registry_name:{}".format(registry_name))
 
     REGISTRY = {}
     REGISTRY_CLASS_NAMES = set()

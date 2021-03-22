@@ -23,6 +23,7 @@ from .fairseq_model import (
     BaseFairseqModel,
     FairseqEncoderDecoderModel,
     FairseqAEEncoderDecoderModel,
+    FairseqDVNMTEncoderDecoderModel,
     FairseqEncoderModel,
     FairseqLanguageModel,
     FairseqModel,

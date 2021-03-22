@@ -1105,6 +1105,10 @@ class Trainer(object):
             )
         self._num_xla_compiles = num_xla_compiles
 
+# class Classifier_Trainer(Trainer):
+#     def __init__(self, args, task, model, criterion, quantizer=None):
+#         super().__init__(args, task, model, criterion, quantizer=None)
+
 
 def _catalog_shared_params(module, memo=None, prefix=""):
     if memo is None:

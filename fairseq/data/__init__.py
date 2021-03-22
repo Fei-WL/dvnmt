@@ -28,6 +28,7 @@ from .indexed_dataset import (
 )
 from .language_pair_dataset import LanguagePairDataset
 from .language_pair_doc_dataset import LanguagePairDocDataset
+from .language_doc_label_dataset import LanguageDocLabelDataset
 from .list_dataset import ListDataset
 from .lm_context_window_dataset import LMContextWindowDataset
 from .lru_cache_dataset import LRUCacheDataset

@@ -14,7 +14,7 @@ from fairseq import metrics, options, utils
 from fairseq.data import (
     AppendTokenDataset,
     ConcatDataset,
-    LanguagePairDocDataset,
+    LanguageDocLabelDataset,
     PrependTokenDataset,
     StripTokenDataset,
     TruncateDataset,
@@ -55,10 +55,13 @@ def load_langpair_dataset(
         filename = os.path.join(data_path, "{}.{}-{}.{}".format(split, src, tgt, lang))
         return indexed_dataset.dataset_exists(filename, impl=dataset_impl)
 
-    src_datasets = []
-    tgt_datasets = []
+    def label_exists(data_path):
+        filename = os.path.join(data_path, "{}{}".format(split, "_label"))
+        return indexed_dataset.dataset_exists(filename, impl=dataset_impl)
+
     prev_datasets = []
-    post_datasets = []
+    src_datasets = []
+    label_datasets = []
 
     for k in itertools.count():
         split_k = split + (str(k) if k > 0 else "")
@@ -75,6 +78,7 @@ def load_langpair_dataset(
                 raise FileNotFoundError(
                     "Dataset not found: {} ({})".format(split, data_path)
                 )
+        
         if split_exists(split_k+"_prev", src, tgt, src, data_path):
             prev_prefix = os.path.join(data_path, "{}.{}-{}.".format(split_k+"_prev", src, tgt))
         elif split_exists(split_k+"_prev", tgt, src, src, data_path):
@@ -86,12 +90,16 @@ def load_langpair_dataset(
                 raise FileNotFoundError(
                     "Dataset not found: {} ({})".format(split+"prev", data_path)
                 )
-        if split_exists(split_k+"_post", src, tgt, src, data_path):
-            post_prefix = os.path.join(data_path, "{}.{}-{}.".format(split_k+"_post", src, tgt))
-        elif split_exists(split_k+"_post", tgt, src, src, data_path):
-            post_prefix = os.path.join(data_path, "{}.{}-{}.".format(split_k+"_post", tgt, src))
+        
+        if label_exists(data_path):
+            label_prefix = os.path.join(data_path, "{}{}".format(split, "_label"))
         else:
-            post_prefix = os.path.join(data_path, "{}.{}-{}.".format(split_k+"_post", src, tgt))
+            if k > 0:
+                break
+            else:
+                raise FileNotFoundError(
+                    "Dataset not found: {} ({})".format(split+"_label", data_path)
+                )
 
         src_dataset = data_utils.load_indexed_dataset(
             prefix + src, src_dict, dataset_impl
@@ -103,11 +111,11 @@ def load_langpair_dataset(
         )
         prev_datasets.append(prev_dataset)
 
-        tgt_dataset = data_utils.load_indexed_dataset(
-            prefix + tgt, tgt_dict, dataset_impl
+        label_dataset = data_utils.load_indexed_dataset(
+            label_prefix, dictionary=None, dataset_impl=dataset_impl
         )
-        if tgt_dataset is not None:
-            tgt_datasets.append(tgt_dataset)
+        if label_dataset is not None:
+            label_datasets.append(label_dataset)
 
         logger.info(
             "{} {} {}-{} {} examples".format(
@@ -118,48 +126,39 @@ def load_langpair_dataset(
         if not combine:
             break
 
-    assert len(src_datasets) == len(tgt_datasets) and\
+    assert len(src_datasets) == len(label_datasets) and\
            len(prev_datasets) == len(src_datasets) and\
-           len(post_datasets) == len(src_datasets) or \
-           len(tgt_datasets) == 0 or \
-           len(post_datasets) == 0
+           len(prev_datasets) == len(label_datasets)
 
     if len(src_datasets) == 1:
-        src_dataset = src_datasets[0]
         prev_dataset = prev_datasets[0]
-        post_dataset = post_datasets[0] if len(post_datasets) > 0 else None
-        tgt_dataset = tgt_datasets[0] if len(tgt_datasets) > 0 else None
+        src_dataset = src_datasets[0]
+        label_dataset = label_datasets[0]
     else:
         sample_ratios = [1] * len(src_datasets)
         sample_ratios[0] = upsample_primary
         src_dataset = ConcatDataset(src_datasets, sample_ratios)
         prev_dataset = ConcatDataset(prev_datasets, sample_ratios)
 
-        if len(tgt_datasets) > 0:
-            tgt_dataset = ConcatDataset(tgt_datasets, sample_ratios)
+        if len(label_datasets) > 0:
+            label_dataset = ConcatDataset(label_datasets, sample_ratios)
         else:
-            tgt_dataset = None
+            label_dataset = None
 
     eos = None
 
     align_dataset = None
-    if load_alignments:
-        align_path = os.path.join(data_path, "{}.align.{}-{}".format(split, src, tgt))
-        if indexed_dataset.dataset_exists(align_path, impl=dataset_impl):
-            align_dataset = data_utils.load_indexed_dataset(
-                align_path, None, dataset_impl
-            )
 
-    tgt_dataset_sizes = tgt_dataset.sizes if tgt_dataset is not None else None
+    label_dataset_sizes = label_dataset.sizes if label_dataset is not None else None
 
-    return LanguagePairDocDataset(
+    return LanguageDocLabelDataset(
         src_dataset,
         src_dataset.sizes,
         src_dict,
         prev_dataset,
         prev_dataset.sizes,
-        tgt_dataset,
-        tgt_dataset_sizes,
+        label_dataset,
+        label_dataset_sizes,
         tgt_dict,
         left_pad_source=left_pad_source,
         left_pad_target=left_pad_target,
@@ -320,7 +319,7 @@ class ClassifyTask(LegacyFairseqTask):
         )
 
     def build_dataset_for_inference(self, src_tokens, src_lengths, constraints=None):
-        return LanguagePairDocDataset(
+        return LanguageDocLabelDataset(
             src_tokens,
             src_lengths,
             self.source_dictionary,

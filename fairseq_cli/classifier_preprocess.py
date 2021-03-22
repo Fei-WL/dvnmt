@@ -16,7 +16,7 @@ from itertools import zip_longest
 from multiprocessing import Pool
 
 from fairseq import options, tasks, utils
-from fairseq.binarizer import Binarizer
+from fairseq.binarizer import Binarizer, LabelBinarizer
 from fairseq.data import indexed_dataset
 
 
@@ -26,7 +26,7 @@ logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO").upper(),
     stream=sys.stdout,
 )
-logger = logging.getLogger("fairseq_cli.preprocess")
+logger = logging.getLogger("fairseq_cli.classifier_preprocess")
 
 
 def main(args):
@@ -55,12 +55,6 @@ def main(args):
     def dict_path(lang):
         return dest_path("dict", lang) + ".txt"
 
-    def build_dictionary(filenames):
-        return task.build_dictionary(
-            filenames,
-            workers=args.workers,
-        )
-
     def label_path():
         return "{}{}".format(args.trainlabel, ".label")
 
@@ -70,11 +64,6 @@ def main(args):
         raise FileExistsError(dict_path(args.source_lang))
     if target and not args.tgtdict and os.path.exists(dict_path(args.target_lang)):
         raise FileExistsError(dict_path(args.target_lang))
-
-    labeldict = build_dictionary([label_path()])
-    logger.info("{}{}".format("Info of labeldict:", labeldict))
-    for idx in range(len(labeldict)):
-        print(labeldict[idx])
 
     assert (
         args.srcdict
@@ -86,10 +75,8 @@ def main(args):
     ), "In classify task, --tgtdict must be set"
     tgt_dict = task.load_dictionary(args.tgtdict)
 
-
     src_dict.save(dict_path(args.source_lang))
     tgt_dict.save(dict_path(args.target_lang))
-    labeldict.save(dict_path("label"))
 
     def make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers):
         logger.info("[{}] Dictionary: {} types".format(lang, len(vocab)))
@@ -157,6 +144,60 @@ def main(args):
             )
         )
 
+    def make_binary_label_dataset(input_prefix, output_prefix):
+        num_workers = args.workers
+        n_seq_tok = [0, 0]
+        replaced = Counter()
+
+        def merge_result(worker_result):
+            replaced.update(worker_result["replaced"])
+            n_seq_tok[0] += worker_result["nseq"]
+            n_seq_tok[1] += worker_result["ntok"]
+
+        input_file = "{}{}".format(
+            input_prefix, ".label"
+        )
+        offsets = LabelBinarizer.find_offsets(input_file, num_workers)
+        pool = None
+        if num_workers > 1:
+            pool = Pool(processes=num_workers - 1)
+            for worker_id in range(1, num_workers):
+                prefix = "{}{}".format(output_prefix, worker_id)
+                pool.apply_async(
+                    labelbinarize,
+                    (
+                        args,
+                        input_file,
+                        prefix,
+                        offsets[worker_id],
+                        offsets[worker_id + 1],
+                    ),
+                    callback=merge_result
+                )
+            pool.close()
+
+        ds = indexed_dataset.make_builder(
+            dataset_dest_file(args, output_prefix, None, "bin"),
+            impl=args.dataset_impl,
+        )
+
+        merge_result(
+            LabelBinarizer.binarize(input_file, lambda t: ds.add_item(t), offset=0, end=offsets[1])
+        )
+
+        if num_workers > 1:
+            pool.join()
+            for worker_id in range(1, num_workers):
+                prefix = "{}{}".format(output_prefix, worker_id)
+                temp_file_path = dataset_dest_prefix(args, prefix, None)
+                ds.merge_file_(temp_file_path)
+                os.remove(indexed_dataset.data_file_path(temp_file_path))
+                os.remove(indexed_dataset.index_file_path(temp_file_path))
+
+        ds.finalize(dataset_dest_file(args, output_prefix, None, "idx"))
+
+        logger.info("[{}] {}".format("label", input_file))
+
     def make_dataset(vocab, input_prefix, output_prefix, lang, num_workers=1):
         if args.dataset_impl == "raw":
             # Copy original text file to destination folder
@@ -168,45 +209,46 @@ def main(args):
         else:
             make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers)
 
+    def make_label_dataset():
+        if args.trainlabel:
+            make_binary_label_dataset(args.trainlabel, "train_label")
+        if args.validlabel:
+            make_binary_label_dataset(args.validlabel, "valid_label")
+        if args.testlabel:
+            make_binary_label_dataset(args.testlabel, "test_label")
+
     def make_all(lang, vocab):
-        if lang == "label":
-            if args.trainlabel:
-                make_dataset(vocab, args.trainlabel, "train", lang, num_workers=args.workers)
-            if args.validlabel:
-                make_dataset(vocab, args.validlabel, "valid", lang, num_workers=args.workers)
-            if args.testlabel:
-                make_dataset(vocab, args.testlabel, "test", lang, num_workers=args.workers)
-        else:
-            if args.trainpref:
-                make_dataset(vocab, args.trainpref, "train", lang, num_workers=args.workers)
+        if args.trainpref:
+            make_dataset(vocab, args.trainpref, "train", lang, num_workers=args.workers)
+        if args.context and lang != args.target_lang:
+            if args.trainprevpref:
+                make_dataset(vocab, args.trainprevpref, "train_prev", lang, num_workers=args.workers)
+            if args.trainpostpref:
+                make_dataset(vocab, args.trainpostpref, "train_post", lang, num_workers=args.workers)
+        if args.validpref:
+            for k, validpref in enumerate(args.validpref.split(",")):
+                outprefix = "valid{}".format(k) if k > 0 else "valid"
+                make_dataset(
+                    vocab, validpref, outprefix, lang, num_workers=args.workers
+                )
             if args.context and lang != args.target_lang:
-                if args.trainprevpref:
-                    make_dataset(vocab, args.trainprevpref, "train_prev", lang, num_workers=args.workers)
-                if args.trainpostpref:
-                    make_dataset(vocab, args.trainpostpref, "train_post", lang, num_workers=args.workers)
-            if args.validpref:
-                for k, validpref in enumerate(args.validpref.split(",")):
-                    outprefix = "valid{}".format(k) if k > 0 else "valid"
-                    make_dataset(
-                        vocab, validpref, outprefix, lang, num_workers=args.workers
-                    )
-                if args.context and lang != args.target_lang:
-                    if args.validprevpref:
-                        make_dataset(vocab, args.validprevpref, "valid_prev", lang, num_workers=args.workers)
-                    if args.validpostpref:
-                        make_dataset(vocab, args.validpostpref, "valid_post", lang, num_workers=args.workers)
-            if args.testpref:
-                for k, testpref in enumerate(args.testpref.split(",")):
-                    outprefix = "test{}".format(k) if k > 0 else "test"
-                    make_dataset(vocab, testpref, outprefix, lang, num_workers=args.workers)
-                if args.context and lang != args.target_lang:
-                    if args.testprevpref:
-                        make_dataset(vocab, args.testprevpref, "test_prev", lang, num_workers=args.workers)
-                    if args.testpostpref:
-                        make_dataset(vocab, args.testpostpref, "test_post", lang, num_workers=args.workers)
+                if args.validprevpref:
+                    make_dataset(vocab, args.validprevpref, "valid_prev", lang, num_workers=args.workers)
+                if args.validpostpref:
+                    make_dataset(vocab, args.validpostpref, "valid_post", lang, num_workers=args.workers)
+        if args.testpref:
+            for k, testpref in enumerate(args.testpref.split(",")):
+                outprefix = "test{}".format(k) if k > 0 else "test"
+                make_dataset(vocab, testpref, outprefix, lang, num_workers=args.workers)
+            if args.context and lang != args.target_lang:
+                if args.testprevpref:
+                    make_dataset(vocab, args.testprevpref, "test_prev", lang, num_workers=args.workers)
+                if args.testpostpref:
+                    make_dataset(vocab, args.testpostpref, "test_post", lang, num_workers=args.workers)
 
     make_all(args.source_lang, src_dict)
-    make_all("label", labeldict)
+
+    make_label_dataset()
 
     logger.info("Wrote preprocessed data to {}".format(args.destdir))
 
@@ -226,6 +268,20 @@ def binarize(args, filename, vocab, output_prefix, lang, offset, end, append_eos
     ds.finalize(dataset_dest_file(args, output_prefix, lang, "idx"))
     return res
 
+def labelbinarize(args, filename, output_prefix, offset, end):
+    ds = indexed_dataset.make_builder(
+        dataset_dest_file(args, output_prefix, None, "bin"),
+        impl=args.dataset_impl,
+    )
+
+    def consumer(tensor):
+        ds.add_item(tensor)
+
+    res = LabelBinarizer.binarize(
+        filename, consumer, offset=offset, end=end
+    )
+    ds.finalize(dataset_dest_file(args, output_prefix, None, "idx"))
+    return res
 
 def dataset_dest_prefix(args, output_prefix, lang):
     # 构造前缀用的

@@ -5,7 +5,7 @@
 
 import argparse
 from typing import Callable, List, Optional
-
+import logging
 import torch
 from fairseq import utils
 from fairseq.data.indexed_dataset import get_available_dataset_impl
@@ -23,6 +23,7 @@ from fairseq.dataclass.utils import gen_parser_from_dataclass
 # this import is for backward compatibility
 from fairseq.utils import csv_str_list, eval_bool, eval_str_dict, eval_str_list  # noqa
 
+logger = logging.getLogger(__name__)
 
 def get_preprocessing_parser(default_task="translation"):
     parser = get_parser("Preprocessing", default_task)
@@ -143,6 +144,7 @@ def parse_args_and_arch(
 
     for registry_name, REGISTRY in REGISTRIES.items():
         choice = getattr(args, registry_name, None)
+        logger.info("registry_name:{}, choice:{}".format(registry_name, choice))
         if choice is not None:
             cls = REGISTRY["registry"][choice]
             if hasattr(cls, "add_args"):
@@ -215,6 +217,7 @@ def get_parser(desc, default_task="translation"):
     from fairseq.registry import REGISTRIES
 
     for registry_name, REGISTRY in REGISTRIES.items():
+        # logger.info("registry_name:{}, default:{}, choices:{}".format("--" + registry_name.replace("_", "-"), REGISTRY["default"], REGISTRY["registry"].keys()))
         parser.add_argument(
             "--" + registry_name.replace("_", "-"),
             default=REGISTRY["default"],
